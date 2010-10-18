@@ -1,0 +1,5 @@
+; $Id$
+name = CRM Fields
+description = Contains multiple value fields with default options
+core = 6.x
+dependencies[] = content

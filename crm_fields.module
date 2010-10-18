@@ -1,0 +1,608 @@
+<?php
+// $Id$
+
+/**
+ * @file
+ * An example to define a simple field, widget, and formatter.
+ * A module could define only a field, only a widget, only a
+ * formatter, or any combination. Widgets and formatters must
+ * declare what kind of field they work with, which can be any
+ * existing field as well as any new field the module creates.
+ * @author Michael Prasuhn <mike@shomeya.com>
+ * @link http://shomeya.com
+ * @package crm_fields
+ */
+
+
+/**
+* Implementation of hook_field_info().
+*/
+function crm_fields_field_info() {
+  return array(
+    'crm_field' => array(
+      'label' => t('CRM Field'),
+      'description' => t('Store text data in the database.'),
+      'content_icon' => 'icon_content_text.png',
+    ),
+  );
+}
+
+/**
+* Implementation of hook_field_settings().
+*/
+function crm_fields_field_settings($op, $field) {
+  switch ($op) {
+    case 'form':
+      $form = array();
+      $form['max_length'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Maximum length'),
+        '#default_value' => is_numeric($field['max_length']) ? $field['max_length'] : 255,
+        '#required' => FALSE,
+        '#element_validate' => array('_crm_fields_length_validate'),
+        '#description' => t('The maximum length of the field in characters. Must be a number between 1 and 255'),
+      );
+      $options = array(
+        'email' => t('Email address'),
+        'phone' => t('Phone number'),
+      );
+      $form['validator'] = array(
+        '#type' => 'select',
+        '#title' => t('Use validation'),
+        '#default_value' => array_key_exists($field['validator'], $options)  ? $field['validator'] : '',
+        '#required' => FALSE,
+        '#options' => $options,
+        '#description' => t('Choose which validator you wish to use with this field.'),
+      );
+      $form['labels'] = array(
+        '#type' => 'textarea',
+        '#title' => t('Allowed labels'),
+        '#default_value' => $field['labels'] ? $field['labels'] : '',
+        '#required' => FALSE,
+        '#element_validate' => array('_crm_fields_labels_validate'),
+        '#description' => t('Enter a list of allowed labels for this field, 1 per line.'),
+      );
+      return $form;
+
+    // Return an array of the names of the field settings
+    // defined by this module. These are the items that
+    // CCK will store in the field definition
+    // and they will be available in the $field array.
+    // This should match the items defined in 'form' above.
+    case 'save':
+      return array('max_length', 'validator', 'labels');
+
+    // Define the database storage for this field using
+    // the same construct used by schema API. Most fields
+    // have only one column, but there can be any number
+    // of different columns. After the schema API values,
+    // add two optional values to each column,
+    //  'views', to define a Views field
+    //  'sortable', to add a Views sort field
+    case 'database columns':
+      $columns['value'] = array(
+        'type' => 'varchar',
+        'length' => is_numeric($field['max_length']) ? $field['max_length'] : 255,
+        'not null' => FALSE,
+        'sortable' => TRUE,
+        'views' => TRUE,
+      );
+      $columns['label'] = array(
+        'type' => 'varchar',
+        'length' =>  255,
+        'not null' => FALSE,
+        'sortable' => TRUE,
+        'views' => TRUE,
+      );
+      $columns['default'] = array(
+        'type' => 'int',
+        'not null' => FALSE,
+        'sortable' => TRUE,
+        'views' => TRUE,
+      );
+      return $columns;
+
+    // Optional: Make changes to the default $data array
+    // created for Views. Omit this if no changes are
+    // needed, use it to add a custom handler or make
+    // other changes.
+    case 'views data':
+      // Start with the $data created by CCK
+      // and alter it as needed. The following
+      // code illustrates how you would retrieve
+      // the necessary data.
+      $data = content_views_field_views_data($field);
+      $db_info = content_database_info($field);
+      $table_alias = content_views_tablename($field);
+      $field_data = $data[$table_alias][$field['field_name'] .'_value'];
+      // Make changes to $data as needed here.
+      return $data;
+  }
+}
+
+/**
+* Custom validation of settings values.
+*
+* Create callbacks like this to do settings validation.
+*/
+function _crm_fields_length_validate($element, &$form_state) {
+  $value = $form_state['values']['max_length'];
+  if ($value && !is_numeric($value)|| $value < 1 || $value > 255) {
+    form_set_error('max_length', t('"Max length" must be a number between 1 and 255.'));
+  }
+}
+
+/**
+* Custom validation of settings values.
+*
+* Create callbacks like this to do settings validation.
+*/
+function _crm_fields_labels_validate($element, &$form_state) {
+  // @TODO add validation into
+}
+
+/**
+* Implementation of hook_field().
+*/
+function crm_fields_field($op, &$node, $field, &$items, $teaser, $page) {
+  switch ($op) {
+    // Do validation on the field values here. The widget
+    // will do its own validation and you cannot make any
+    // assumptions about what kind of widget has been used,
+    // so don't validate widget values, only field values.
+    case 'validate':
+      if (is_array($items)) {
+        foreach ($items as $delta => $item) {
+          // The error_element is needed so that CCK can
+          // set an error on the right sub-element when
+          // fields are deeply nested in the form.
+          $error_element = isset($item['_error_element']) ? $item['_error_element'] : '';
+          if (is_array($item) && isset($item['_error_element'])) unset($item['_error_element']);
+          if (!empty($item['value'])) {
+            if (!empty($field['max_length']) && drupal_strlen($item['value']) > $field['max_length']) {
+              form_set_error($error_element, t('%name: the value may not be longer than %max characters.', array('%name' => $field['widget']['label'], '%max' => $field['max_length'])));
+            }
+          }
+          // @TODO Add validations for validators for the field
+        }
+      }
+      return $items;
+
+    // This is where you make sure that user-provided
+    // data is sanitized before being displayed.
+    case 'sanitize':
+      foreach ($items as $delta => $item) {
+        $example = check_plain($item['value']);
+        $items[$delta]['safe'] = $example;
+      }
+  }
+}
+
+/**
+* Implementation of hook_content_is_empty().
+*
+* CCK has no way to know if something like a zero is
+* an empty value or a valid value, so return
+* TRUE or FALSE to a populated field $item array.
+* CCK uses this to remove empty multi-value elements
+* from forms.
+*/
+function crm_fields_content_is_empty($item, $field) {
+  if (empty($item['value'])) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+* Implementation of hook content_generate().
+*
+* Optional, provide dummy value for nodes created
+* by the Devel Generate module.
+*/
+function crm_fields_content_generate($node, $field) {
+  $node_field = array();
+  // Generate a value that respects max_length.
+  if (empty($field['max_length'])) {
+    $field['max_length'] = 12;
+  }
+  $node_field['value'] = user_password($field['max_length']);
+  return $node_field;
+}
+
+/**
+* Implementation of hook_token_list()
+* and hook_token_values().
+*
+* Optional, provide token values for this field.
+*/
+function crm_fields_token_list($type = 'all') {
+  if ($type == 'field' || $type == 'all') {
+    $tokens = array();
+
+    $tokens['crm_field']['raw']       = t('Raw, unfiltered text');
+    $tokens['crm_field']['formatted'] = t('Formatted and filtered text');
+
+    return $tokens;
+  }
+}
+
+function crm_fields_token_values($type, $object = NULL) {
+  if ($type == 'field') {
+    $item = $object[0];
+
+    $tokens['raw']  = $item['value'];
+    $tokens['formatted'] = isset($item['view']) ? $item['view'] : '';
+    return $tokens;
+  }
+}
+
+//==========================================//
+// DEFINING A FORMATTER
+//==========================================//
+
+/**
+* Implementation of hook_theme().
+*/
+function crm_fields_theme() {
+  return array(
+    // Themes for the formatters.
+    'crm_fields_formatter_default' => array(
+      'arguments' => array('element' => NULL),
+    ),
+    'crm_fields_formatter_plain' => array(
+      'arguments' => array('element' => NULL),
+    ),
+    'crm_fields_element' => array(
+      'arguments' => array('element' => NULL),
+    ),
+    'crm_fields_element_form' => array(
+      'arguments' => array('form' => NULL),
+    ),
+  );
+}
+
+/**
+* Implementation of hook_field_formatter_info().
+*
+* All fields should have a 'default' formatter.
+* Any number of other formatters can be defined as well.
+* It's nice for there always to be a 'plain' option
+* for the raw value, but that is not required.
+*
+*/
+function crm_fields_field_formatter_info() {
+  return array(
+    // The machine name of the formatter.
+    'default' => array(
+      'label' => t('Default'),
+      'field types' => array('crm_field'),
+      'multiple values' => CONTENT_HANDLE_CORE,
+    ),
+    'plain' => array(
+      'label' => t('Plain text'),
+      'field types' => array('crm_field'),
+      'multiple values' => CONTENT_HANDLE_CORE,
+    ),
+  );
+}
+
+/**
+* Theme function for 'default' example field formatter.
+*
+* $element['#item']: the sanitized $delta value for the item,
+* $element['#field_name']: the field name,
+* $element['#type_name']: the $node->type,
+* $element['#formatter']: the $formatter_name,
+* $element'#node']: the $node,
+* $element['#delta']: the delta of this item, like '0',
+*
+*/
+function theme_crm_fields_formatter_default($element) {
+  return $element['#item']['safe'];
+}
+
+/**
+* Theme function for 'plain' example field formatter.
+*/
+function theme_crm_fields_formatter_plain($element) {
+  return strip_tags($element['#item']['safe']);
+}
+
+//==========================================//
+// DEFINING A WIDGET
+//==========================================//
+
+/**
+* Implementation of hook_widget_info().
+*
+* Here we indicate that the content module will handle
+* the default value and multiple values for these widgets.
+*
+* Callbacks can be omitted if default handing is used.
+* They're included here just so this module can be used
+* as an example for custom modules that might do things
+* differently.
+*/
+function crm_fields_widget_info() {
+  return array(
+    'crm_fields_element' => array(
+      'label' => t('CRM field widget'),
+      'field types' => array('crm_field'),
+      // Who will handle multiple values, default is core.
+      // 'CONTENT_HANDLE_MODULE' means the module does it.
+      // See optionwidgets for an example of a module that
+      // handles its own multiple values.
+      'multiple values' => CONTENT_HANDLE_CORE,
+      'callbacks' => array(
+        // Who will create the default value, default is core.
+        // 'CONTENT_CALLBACK_CUSTOM' means the module does it.
+        // 'CONTENT_CALLBACK_NONE' means this widget has
+        // no default value.
+        'default value' => CONTENT_CALLBACK_DEFAULT,
+      ),
+    ),
+  );
+}
+
+/**
+* Implementation of hook_widget_settings().
+*/
+function crm_fields_widget_settings($op, $widget) {
+  switch ($op) {
+    // Create the form element to be used on the widget
+    // settings form. Widget settings can be different
+    // for each shared instance of the same field and
+    // should define the way the value is displayed to
+    // the user in the edit form for that content type.
+    case 'form':
+      $form = array();
+      $size = (isset($widget['size']) && is_numeric($widget['size'])) ? $widget['size'] : 60;
+      $form['size'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Size of textfield'),
+        '#default_value' => $size,
+        '#element_validate' => array('_element_validate_integer_positive'),
+        '#required' => TRUE,
+      );
+      return $form;
+
+    // Return an array of the names of the widget settings
+    // defined by this module. These are the items that
+    // CCK will store in the widget definition and they
+    // will be available in the $field['widget'] array.
+    // This should match the items defined in 'form' above.
+    case 'save':
+      return array('size');
+  }
+}
+
+/**
+* Implementation of hook_widget().
+*
+* Attach a single form element to the form.
+*
+* CCK core fields only add a stub element and builds
+* the complete item in #process so reusable elements
+* created by hook_elements can be plugged into any
+* module that provides valid $field information.
+*
+* Custom widgets that don't care about using hook_elements
+* can be built out completely at this time.
+*
+* If there are multiple values for this field and CCK is
+* handling multiple values, the content module will call
+* this function as many times as needed.
+*
+* @param $form
+*   the entire form array,
+*   $form['#node'] holds node information
+* @param $form_state
+*   the form_state,
+*   $form_state['values'][$field['field_name']]
+*   holds the field's form values.
+* @param $field
+*   the field array
+* @param $items
+*   array of default values for this field
+* @param $delta
+*   the order of this item in the array of
+*   subelements (0, 1, 2, etc)
+*
+* @return
+*   the form item for a single element for this field
+*/
+function crm_fields_widget(&$form, &$form_state, $field, $items, $delta = 0) {
+  $element = array(
+    '#type' => $field['widget']['type'],
+    '#default_value' => !empty($items[$delta]) ? $items[$delta] : array(),
+    '#element_validate' => array('crm_fields_crm_field_widget_validate'),
+    '#delta' => $delta,
+  );
+  return $element;
+}
+
+/**
+ * Implementation of hook_elements().
+ *
+ * @return array
+ */
+function crm_fields_elements() {
+  $elements = array( 'crm_fields_element' =>
+    array(
+      '#input' => TRUE,
+      '#process' => array( 'crm_fields_element_entry_process' ),
+    ),
+  );
+
+  return $elements;
+}
+
+function crm_fields_element_entry_process($element, $edit, &$form_state, $form) {
+  $default = $element['#value'];
+
+  $field = content_fields($element['#field_name'], $element['#type_name']);
+  $options = preg_split('[\n]', $field['labels']);
+
+  if ($field['validator'] == 'email') {
+    $label = t('E-mail');
+  }
+  elseif ($field['validator'] == 'phone') {
+    $label = t('Phone');
+  }
+
+  if (isset($form_state['crm_fields'][$field['field_name']])) {
+    $default_delta = $form_state['crm_fields'][$field['field_name']]['default'];
+  }
+
+
+  $element['value'] = array(
+    '#title' => $label,
+    '#type' => 'textfield',
+    '#default_value' => $default['value'],
+  );
+  $element['label'] = array(
+    '#type' => 'select',
+    '#options' => $options,
+    '#default_value' => $default['label'],
+  );
+  if ($element['#delta'] == $default_delta) {
+    $element['default'] = array(
+      '#type' => 'markup',
+      '#value' => t('default'),
+    );
+  } else {
+    $element['default'] = array(
+      '#type' => 'submit',
+      '#value' => t('make default'),
+      '#submit' => array('crm_fields_default_submit'),
+      '#ahah' => array(
+        'path' => 'crm_fields_add/js/'. $field['type_name'] .'/'. $field['field_name'] .'/'. $element['#delta'],
+        'wrapper' => str_replace('_', '-',  $field['field_name']) .'-items',
+        'method' => 'replace',
+        'effect' => 'fade',
+      ),
+    );
+  }
+
+  $element['#theme'] = 'crm_fields_element_form';
+
+  return $element;
+}
+
+
+/**
+ * @param  $element
+ * @return
+ */
+function theme_crm_fields_element($element) {
+  return $element['#children'];
+}
+
+/**
+ * @param  $form
+ * @return void
+ */
+function theme_crm_fields_element_form($form) {
+  $output = '';
+
+
+  $output .= '<div class="crm-field-row">';
+  $output .= drupal_render($form['value']);
+  $output .= '<div class="crm-fields-item-label">'. drupal_render($form['label']) .'</div>';
+  $output .= '<div class="crm-fields-item-default">'. drupal_render($form['default']) .'</div>';
+
+  $output .= '</div>';
+
+
+
+  $output .= '<div class="crm-fields-item-add-another">'. drupal_render($form['add_another']) .'</div>';
+
+  return $output;
+}
+
+function crm_fields_menu() {
+  $items = array();
+
+  $items['crm_fields_add/js'] = array(
+    'title' => 'crm_fields',
+    'page callback' => 'crm_fields_operations_form_js',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * JS callback for rebuilding form.
+ */
+function crm_fields_operations_form_js($type_name_url, $field_name, $delta = NULL) {
+  $type = content_types($type_name_url);
+  $field = content_fields($field_name, $type['type']);
+  module_load_include('inc', 'content', 'includes/content.node_form');
+
+  if (($field['multiple'] != 1) || empty($_POST['form_build_id'])) {
+    // Invalid request.
+    drupal_json(array('data' => ''));
+    exit;
+  }
+  
+  // Retrieve the cached form.
+  $form_state = array('submitted' => FALSE);
+  $form_build_id = $_POST['form_build_id'];
+  $form = form_get_cache($form_build_id, $form_state);
+  if (!$form) {
+    // Invalid form_build_id.
+    drupal_json(array('data' => ''));
+    exit;
+  }
+
+  // Get ready to process form.
+  $args = $form['#parameters'];
+  $form_id = array_shift($args);
+  $form_state['post'] = $form['#post'] = $_POST;
+  $form['#programmed'] = $form['#redirect'] = FALSE;
+
+  $form_state['crm_fields']['field_info'] = array('field' => $field, 'type' => $type);
+  $form_state['crm_fields']['delta'] = $delta;
+
+  // Process form and save updated info.
+  drupal_process_form($form_id, $form, $form_state);
+
+
+  unset($form[$field_name]['add_another']);
+  // Rebuild form, cache it, but do not process it again.
+  $form = drupal_rebuild_form($form_id, $form_state, $args, $form_build_id);
+
+  // Pick the bits we need from the form, and render them.
+  $element_form = $form[$field_name];
+  unset($element_form['#prefix'], $element_form['#suffix']);
+  $output = theme('status_messages') . drupal_render($element_form);
+
+  // Final rendering callback.
+  drupal_json(array('status' => TRUE, 'data' => $output));
+}
+
+/**
+ * @param  $form
+ * @param  $form_state
+ * @return void
+ */
+function crm_fields_default_submit($form, &$form_state) {
+  $field_name = $form_state['crm_fields']['field_info']['field']['field_name'];
+  $form_state['crm_fields'][$field_name]['default'] = $form_state['crm_fields']['delta']; 
+  dsm($form_state);
+}
+
+/**
+ * @param  $element
+ * @param  $form_state
+ * @return void
+ */
+function crm_fields_crm_field_widget_validate(&$element, &$form_state) {
+  $field_name = $element['#field_name'];
+  $field = content_fields($element['#field_name'], $element['#type_name']);
+
+  
+}

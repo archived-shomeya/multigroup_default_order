@@ -1,0 +1,38 @@
+<?php
+// $Id$
+
+/**
+ * Implementation of hook_install().
+ */
+function crm_fields_install() {
+  drupal_load('module', 'content');
+  content_notify('install', 'crm_fields');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function crm_fields_uninstall() {
+  drupal_load('module', 'content');
+  content_notify('uninstall', 'crm_fields');
+}
+
+/**
+ * Implementation of hook_enable().
+ *
+ * Notify content module when this module is enabled.
+ */
+function crm_fields_enable() {
+  drupal_load('module', 'content');
+  content_notify('enable', 'crm_fields');
+}
+
+/**
+ * Implementation of hook_disable().
+ *
+ * Notify content module when this module is disabled.
+ */
+function crm_fields_disable() {
+  drupal_load('module', 'content');
+  content_notify('disable', 'crm_fields');
+}
