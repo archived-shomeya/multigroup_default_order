@@ -7,15 +7,27 @@
  * Add option to field group settings form to include item default reordering.
  */
 function multigroup_default_order_form_alter(&$form, $form_state, $form_id) {
+  // Add option to field group settings form to include item default reordering.
   if ($form_id == 'fieldgroup_group_edit_form') {
     $form['settings']['multigroup']['default-order'] = array(
       '#type' => 'checkbox',
       '#title' => 'Default ordering',
-      '#default_value' => variable_get('multigroup_default_order.default-order.' . $form['group_name']['#default_value'], 0),
+      '#default_value' => variable_get('multigroup_default_order.' . $form['group_name']['#default_value'], 0),
       '#description' => t('Enable this option to add an option to each group to set that group as default (show up first).'),
       '#weight' => -1,
     );
     $form['#submit'][] = 'multigroup_default_order_form_fieldgroup_group_edit_form_submit';
+  }
+  else if (isset($form['#node']) && isset($form['type']['#value']) && $form_id == $form['type']['#value'] .'_node_form') {
+    // Check each multigroup to see if default-order is enabled.
+    $groups = fieldgroup_groups($form['type']['#value']);
+    foreach ($groups as $group) {
+      if ($group['group_type'] == 'multigroup' && $group['settings']['multigroup']['default-order']) {
+        // Add class to listen on.
+        $form[$group['group_name']]['#attributes']['class'] .= ' multigroup-default-order';
+        drupal_add_js(drupal_get_path('module', 'multigroup_default_order') .  '/multigroup_default_order.js');
+      }
+    }
   }
 }
 
