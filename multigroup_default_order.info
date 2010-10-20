@@ -1,0 +1,6 @@
+; $Id$
+name = Multigroup Default Order
+description = Allow default ordering of multipgroup fieldgroup items.
+core = 6.x
+dependencies[] = content
+dependencies[] = content_multigroup

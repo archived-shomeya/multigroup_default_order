@@ -1,0 +1,15 @@
+<?php
+// $Id$
+
+/**
+ * Implementation of hook_install().
+ */
+function multigroup_default_order_install() {
+  db_query("UPDATE {system} SET weight = %d WHERE name = '%s'", 10, 'multigroup_default_order');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function multigroup_default_order_uninstall() {
+}
