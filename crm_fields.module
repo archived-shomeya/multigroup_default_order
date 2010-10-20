@@ -15,10 +15,9 @@
 
 /**
  * Implementation of hook_form_alter().
- *
- * Add option to field group settings form to include item default reordering.
  */
 function crm_fields_form_alter(&$form, $form_state, $form_id) {
+  // Add option to field group settings form to include item default reordering.
   if ($form_id == 'fieldgroup_group_edit_form') {
     $form['settings']['multigroup']['default-order'] = array(
       '#type' => 'checkbox',
@@ -28,6 +27,17 @@ function crm_fields_form_alter(&$form, $form_state, $form_id) {
       '#weight' => -1,
     );
     $form['#submit'][] = 'crm_fields_form_fieldgroup_group_edit_form_submit';
+  }
+  else if (isset($form['#node']) && isset($form['type']['#value']) && $form_id == $form['type']['#value'] .'_node_form') {
+    // Check each multigroup to see if default-order is enabled.
+    $groups = fieldgroup_groups($form['type']['#value']);
+    foreach ($groups as $group) {
+      if ($group['group_type'] == 'multigroup' && $group['settings']['multigroup']['default-order']) {
+        // Add class to listen on.
+        $form[$group['group_name']]['#attributes']['class'] .= ' multigroup-default-order';
+        drupal_add_js(drupal_get_path('module', 'crm_fields') . '/crm_fields.js');
+      }
+    }
   }
 }
 
